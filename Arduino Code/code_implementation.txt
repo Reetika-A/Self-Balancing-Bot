@@ -1,0 +1,163 @@
+```cpp
+#include <Wire.h>
+#include <MPU6050.h>
+
+MPU6050 mpu;
+
+// Motor A - Left Motor
+const int ENA = 5;
+const int IN1 = 7;
+const int IN2 = 8;
+
+// Motor B - Right Motor
+const int ENB = 6;
+const int IN3 = 9;
+const int IN4 = 10;
+
+// PID constants
+float Kp = 18.0;
+float Ki = 0.8;
+float Kd = 0.7;
+
+float error;
+float previousError = 0;
+float integral = 0;
+float derivative;
+float output;
+
+unsigned long previousTime = 0;
+
+void setup() {
+  Serial.begin(9600);
+  Wire.begin();
+
+  // Motor pins
+  pinMode(ENA, OUTPUT);
+  pinMode(IN1, OUTPUT);
+  pinMode(IN2, OUTPUT);
+
+  pinMode(ENB, OUTPUT);
+  pinMode(IN3, OUTPUT);
+  pinMode(IN4, OUTPUT);
+
+  // Initialize MPU6050
+  mpu.initialize();
+
+  if (mpu.testConnection()) {
+    Serial.println("MPU6050 connected");
+  } else {
+    Serial.println("MPU6050 connection failed");
+  }
+
+  previousTime = millis();
+}
+
+void loop() {
+
+  // Read raw accelerometer and gyroscope data
+  int16_t ax, ay, az;
+  int16_t gx, gy, gz;
+
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  // Calculate tilt angle using accelerometer
+  float angle = atan2(ax, az) * 180.0 / PI;
+
+  // Desired upright position
+  float setPoint = 0.0;
+
+  // Calculate error
+  error = setPoint - angle;
+
+  // Calculate time difference
+  unsigned long currentTime = millis();
+  float dt = (currentTime - previousTime) / 1000.0;
+
+  if (dt <= 0) {
+    dt = 0.001;
+  }
+
+  previousTime = currentTime;
+
+  // Integral term
+  integral += error * dt;
+
+  // Prevent excessive integral buildup
+  integral = constrain(integral, -100, 100);
+
+  // Derivative term
+  derivative = (error - previousError) / dt;
+
+  // PID calculation
+  output = (Kp * error) +
+           (Ki * integral) +
+           (Kd * derivative);
+
+  previousError = error;
+
+  // Limit motor output
+  output = constrain(output, -255, 255);
+
+  // Drive motors according to PID output
+  if (output > 0) {
+    moveForward(abs(output));
+  }
+  else if (output < 0) {
+    moveBackward(abs(output));
+  }
+  else {
+    stopMotors();
+  }
+
+  // Display values for debugging
+  Serial.print("Angle: ");
+  Serial.print(angle);
+  Serial.print("  PID Output: ");
+  Serial.println(output);
+
+  delay(5);
+}
+
+// Move both motors forward
+void moveForward(int speedValue) {
+
+  speedValue = constrain(speedValue, 0, 255);
+
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
+
+  analogWrite(ENA, speedValue);
+  analogWrite(ENB, speedValue);
+}
+
+// Move both motors backward
+void moveBackward(int speedValue) {
+
+  speedValue = constrain(speedValue, 0, 255);
+
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
+
+  analogWrite(ENA, speedValue);
+  analogWrite(ENB, speedValue);
+}
+
+// Stop both motors
+void stopMotors() {
+
+  analogWrite(ENA, 0);
+  analogWrite(ENB, 0);
+
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, LOW);
+
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, LOW);
+}
+```
